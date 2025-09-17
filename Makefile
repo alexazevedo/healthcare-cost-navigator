@@ -81,6 +81,13 @@ dev-server: ## Start development server locally
 python-shell: ## Open Python shell with app context
 	pipenv run python -c "from app.main import app; print('App loaded successfully')"
 
+# Scripts
+download-sample-ny-data: ## Download and extract NY healthcare data from CMS
+	pipenv run python scripts/extract_ny_data.py
+
+run-script: ## Run a script from the scripts/ directory (usage: make run-script SCRIPT=script_name.py)
+	pipenv run python scripts/$(SCRIPT)
+
 # Docker Operations
 start: ## Start the application with Docker Compose
 	docker compose up -d

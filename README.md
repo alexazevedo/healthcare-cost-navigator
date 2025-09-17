@@ -34,7 +34,10 @@ A FastAPI-based healthcare cost navigator application built with Python 3.13, as
 │   ├── OFH-2.md
 │   ├── OFH-3.md
 │   ├── OFH-4.md
-│   └── OFH-5.md
+│   ├── OFH-5.md
+│   └── OFH-6.md
+├── scripts/
+│   └── extract_ny_data.py
 ├── Pipfile
 ├── Pipfile.lock
 ├── alembic.ini
@@ -141,6 +144,25 @@ The application uses the following environment variables (with defaults):
 - `POSTGRES_PASSWORD` (default: password)
 - `POSTGRES_DB` (default: healthcare_cost_navigator)
 - `DATABASE_URL` (auto-generated from above)
+
+## Scripts
+
+The `scripts/` directory contains utility scripts for data processing and maintenance:
+
+- **`extract_ny_data.py`**: Downloads and processes CMS healthcare data for New York state, creating a normalized CSV file ready for ETL processing.
+
+### Running Scripts
+
+```bash
+# Download and extract NY healthcare data from CMS
+make download-sample-ny-data
+
+# Run other scripts (generic command)
+make run-script SCRIPT=script_name.py
+
+# Or run directly with pipenv
+pipenv run python scripts/extract_ny_data.py
+```
 
 ## Technology Stack
 
