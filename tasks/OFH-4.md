@@ -23,13 +23,41 @@ Implement endpoints:
 
 Make sure all queries use async SQLAlchemy.  
 
+## Usage
+
+```bash
+# Start the development server
+make dev-server
+
+# Test the providers endpoint
+curl "http://localhost:8000/providers?drg=ALCOHOL&zip=10001&radius_km=25"
+
+# Test the ask endpoint
+curl -X POST "http://localhost:8000/ask" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Who is cheapest for ALCOHOL DRG?"}'
+```
+
+## API Endpoints
+
+### GET /providers
+- **Query Parameters:**
+  - `drg` (optional): DRG definition to search for (fuzzy match)
+  - `zip` (optional): ZIP code to search from
+  - `radius_km` (optional): Radius in kilometers
+- **Returns:** List of providers with costs and ratings, sorted by cost
+
+### POST /ask
+- **Body:** `{"question": "your natural language question"}`
+- **Returns:** Answer with grounded results from the database
+
 ## Acceptance Criteria
-- [ ] GET /providers implemented  
-- [ ] Supports DRG fuzzy search with ILIKE  
-- [ ] Filters by radius from zip code  
-- [ ] Returns providers sorted by cost  
-- [ ] Includes ratings in response  
-- [ ] POST /ask implemented with OpenAI integration  
-- [ ] Converts NL queries into grounded SQL  
-- [ ] Handles out-of-scope queries gracefully  
-- [ ] All DB queries async  
+- [x] GET /providers implemented  
+- [x] Supports DRG fuzzy search with ILIKE  
+- [x] Filters by radius from zip code  
+- [x] Returns providers sorted by cost  
+- [x] Includes ratings in response  
+- [x] POST /ask implemented with OpenAI integration  
+- [x] Converts NL queries into grounded SQL  
+- [x] Handles out-of-scope queries gracefully  
+- [x] All DB queries async  

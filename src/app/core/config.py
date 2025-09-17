@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "healthcare_cost_navigator"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
+    OPENAI_API_KEY: str | None = None
 
 
 settings = Settings()

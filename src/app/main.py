@@ -18,14 +18,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router, prefix="/api")
+app.include_router(router)
 
 
 @app.get("/")
 async def root():
     return {"message": "Healthcare Cost Navigator API"}
-
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
