@@ -76,10 +76,10 @@ db-downgrade: ## Downgrade database by one migration
 
 # Development Server
 dev-server: ## Start development server locally
-	pipenv run uvicorn src.app.main:app --reload --host 0.0.0.0 --port 8000
+	pipenv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 python-shell: ## Open Python shell with app context
-	pipenv run python -c "from src.app.main import app; print('App loaded successfully')"
+	pipenv run python -c "from app.main import app; print('App loaded successfully')"
 
 # Docker Operations
 start: ## Start the application with Docker Compose

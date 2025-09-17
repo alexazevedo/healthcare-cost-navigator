@@ -14,10 +14,10 @@ Create a Makefile with some basic operations to start/stop the service, lint, fo
 Create just initial structure, no need to create seed data at this point. Do not add any extra features beyond what is required.
 
 ## Acceptance Criteria
-- [ ] FastAPI project created with Python 3.13
-- [ ] Async SQLAlchemy configured
-- [ ] Alembic migrations set up  
-- [ ] Docker and Docker Compose configured  
-- [ ] PostgreSQL service included  
-- [ ] All required configuration files present  
-- [ ] Basic Dockerfile for API created  
+- [x] FastAPI project created with Python 3.13
+- [x] Async SQLAlchemy configured
+- [x] Alembic migrations set up  
+- [x] Docker and Docker Compose configured  
+- [x] PostgreSQL service included  
+- [x] All required configuration files present  
+- [x] Basic Dockerfile for API created  

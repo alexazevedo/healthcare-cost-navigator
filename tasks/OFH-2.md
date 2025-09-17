@@ -21,8 +21,8 @@ Make sure provider_id matches the CSV column Rndrng_Prvdr_CCN (renamed to provid
 Add indexes to support searching by zip_code and ms_drg_definition.  
 
 ## Acceptance Criteria
-- [ ] Models created for providers, drg_prices, and ratings  
-- [ ] Alembic migrations generated and applied  
-- [ ] Foreign keys and relationships set correctly  
-- [ ] Indexes created for performance  
-- [ ] provider_id aligned with CSV data  
+- [x] Models created for providers, drg_prices, and ratings  
+- [x] Alembic migrations generated and applied  
+- [x] Foreign keys and relationships set correctly  
+- [x] Indexes created for performance  
+- [x] provider_id aligned with CSV data  
