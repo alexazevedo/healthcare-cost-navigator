@@ -14,7 +14,7 @@ class DRGPrice(Base):
     provider_id: Mapped[str] = mapped_column(
         VARCHAR(6), ForeignKey("providers.provider_id"), nullable=False
     )
-    ms_drg_definition: Mapped[str] = mapped_column(String(10), nullable=False)
+    ms_drg_definition: Mapped[str] = mapped_column(String(255), nullable=False)
     total_discharges: Mapped[int] = mapped_column(Integer, nullable=False)
     average_covered_charges: Mapped[float] = mapped_column(
         Numeric(10, 2), nullable=False

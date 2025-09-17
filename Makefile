@@ -85,6 +85,9 @@ python-shell: ## Open Python shell with app context
 download-sample-ny-data: ## Download and extract NY healthcare data from CMS
 	pipenv run python scripts/extract_ny_data.py
 
+run-etl: ## Run the ETL pipeline to load data into PostgreSQL
+	pipenv run python scripts/etl.py
+
 run-script: ## Run a script from the scripts/ directory (usage: make run-script SCRIPT=script_name.py)
 	pipenv run python scripts/$(SCRIPT)
 
