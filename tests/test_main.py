@@ -7,11 +7,14 @@ def test_root(client):
 def test_health_check(client):
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
+    assert response.json() == {
+        "status": "healthy",
+        "service": "healthcare-cost-navigator",
+    }
 
 
 def test_api_health_check(client):
-    response = client.get("/api/health")
+    response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {
         "status": "healthy",

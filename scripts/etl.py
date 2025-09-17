@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import sys
@@ -25,6 +25,7 @@ from app.core.database import AsyncSessionLocal
 from app.models.provider import Provider
 from app.models.drg_price import DRGPrice
 from app.models.rating import Rating
+from app.models.zip_code import ZipCode
 
 
 class ETLPipeline:
@@ -63,6 +64,7 @@ class ETLPipeline:
             # Step 5: Generate and load ratings
             print("Step 5: Generating and loading ratings...")
             await self._generate_and_load_ratings()
+            await self._load_zip_codes()
             
             print("\n" + "=" * 60)
             print("ETL Pipeline completed successfully!")
@@ -206,6 +208,44 @@ class ETLPipeline:
             
             await session.commit()
             print(f"Generated {len(self.ratings_data)} ratings")
+
+    async def _load_zip_codes(self) -> None:
+        """Load ZIP code data from CSV into database."""
+        zip_csv_path = "zip_lat_lon.csv"
+        
+        if not Path(zip_csv_path).exists():
+            print(f"ZIP code CSV file not found: {zip_csv_path}")
+            print("Please run 'python scripts/build_zip_latlon.py' first")
+            return
+
+        print(f"Loading ZIP code data from: {zip_csv_path}")
+        
+        try:
+            # Read ZIP code data
+            df = pd.read_csv(zip_csv_path)
+            print(f"Found {len(df)} ZIP codes")
+            
+            async with AsyncSessionLocal() as session:
+                # Clear existing ZIP code data
+                await session.execute(text("DELETE FROM zip_codes"))
+                
+                # Load new ZIP code data
+                for _, row in df.iterrows():
+                    # Convert ZIP code to integer first to remove decimal point, then back to string
+                    zip_code_str = str(int(float(row['zip_code'])))
+                    zip_code = ZipCode(
+                        zip_code=zip_code_str,
+                        latitude=float(row['latitude']),
+                        longitude=float(row['longitude'])
+                    )
+                    session.add(zip_code)
+                
+                await session.commit()
+                print(f"Loaded {len(df)} ZIP codes into database")
+                
+        except Exception as e:
+            print(f"Error loading ZIP code data: {e}")
+            raise
     
     async def get_statistics(self) -> Dict[str, Any]:
         """Get statistics about the loaded data."""
