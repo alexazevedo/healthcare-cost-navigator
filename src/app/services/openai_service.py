@@ -56,7 +56,7 @@ class SafeSQLDatabase(SQLDatabase):
 
 db = SafeSQLDatabase(sync_engine)
 
-# Custom prompt template that avoids markdown formatting
+# Custom prompt template that avoids markdown formatting and provides explicit schema
 CUSTOM_SQL_PROMPT = PromptTemplate(
     input_variables=["input", "table_info", "dialect"],
     template="""Given an input question, create a syntactically correct {dialect} query to run and return the answer.
@@ -68,10 +68,17 @@ SQLQuery: SELECT statement here
 SQLResult: Result of the SQLQuery
 Answer: Final answer here
 
-Only use these tables:
-{table_info}
+EXACT SCHEMA (use these exact column names):
+- providers: provider_id, provider_name, provider_city, provider_state, provider_zip_code
+- drgs: drg_id (INTEGER), ms_drg_definition (VARCHAR) -- NOTE: ms_drg_definition not msr_drg_definition
+- drg_prices: id, provider_id, drg_id (INTEGER FK), total_discharges, average_covered_charges, average_total_payments, average_medicare_payments
+- ratings: id, provider_id, rating
+- zip_codes: zip_code, latitude, longitude
 
-CRITICAL: Write SQL queries as plain text without any formatting.
+CRITICAL: 
+- Use exact column names: ms_drg_definition (NOT msr_drg_definition)
+- drg_id is INTEGER type
+- Write SQL queries as plain text without any formatting
 
 Question: {input}""",
 )
