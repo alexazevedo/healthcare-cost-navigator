@@ -1,43 +1,46 @@
 """Geographic utility functions."""
 
-import math
+import logging
+
+from sqlalchemy import select
+
+from ..core.database import get_async_session_local
+from ..models.zip_code import ZipCode
+
+logger = logging.getLogger(__name__)
 
 
-def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+async def get_zip_coordinates(zip_code: str) -> tuple[float, float]:
     """
-    Calculate the great circle distance between two points on Earth.
+    Get coordinates for a ZIP code from the database.
 
     Args:
-        lat1, lon1: Latitude and longitude of first point in decimal degrees
-        lat2, lon2: Latitude and longitude of second point in decimal degrees
+        zip_code: ZIP code string
 
     Returns:
-        Distance in kilometers
+        Tuple of (latitude, longitude)
+
+    Raises:
+        ValueError: If ZIP code not found in database
     """
-    # Convert decimal degrees to radians
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    async with get_async_session_local()() as session:
+        result = await session.execute(select(ZipCode.latitude, ZipCode.longitude).where(ZipCode.zip_code == zip_code))
+        row = result.first()
 
-    # Haversine formula
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = (
-        math.sin(dlat / 2) ** 2
-        + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    )
-    c = 2 * math.asin(math.sqrt(a))
+        if row:
+            logger.debug(f"Found coordinates for ZIP {zip_code}: {row.latitude}, {row.longitude}")
+            return row.latitude, row.longitude
 
-    # Radius of earth in kilometers
-    r = 6371
-
-    return c * r
+        logger.warning(f"ZIP code {zip_code} not found in database")
+        raise ValueError(f"ZIP code {zip_code} not found in database")
 
 
-def get_zip_coordinates(zip_code: str) -> tuple[float, float]:
+def get_zip_coordinates_sync(zip_code: str) -> tuple[float, float]:
     """
-    Get coordinates for a ZIP code.
+    Synchronous fallback for ZIP coordinates (mock implementation).
 
-    Note: This is a simplified implementation. In production, you would use
-    a proper geocoding service like Google Maps API, US Census API, or similar.
+    This is a fallback for when async context is not available.
+    In production, this should be replaced with a proper geocoding service.
 
     Args:
         zip_code: ZIP code string
@@ -45,12 +48,9 @@ def get_zip_coordinates(zip_code: str) -> tuple[float, float]:
     Returns:
         Tuple of (latitude, longitude)
     """
-    # This is a mock implementation for demonstration
-    # In production, you would use a real geocoding service
-    # For now, we'll use approximate coordinates for New York area ZIP codes
+    logger.warning(f"Using fallback geocoding for ZIP {zip_code}")
 
-    # Convert ZIP to approximate coordinates (very rough approximation)
-    # This is just for demo purposes - real implementation would use geocoding API
+    # Mock implementation for demonstration
     zip_num = int(zip_code[:5]) if zip_code.isdigit() else 10001
 
     # Rough approximation for NY area ZIP codes

@@ -1,13 +1,46 @@
+"""FastAPI endpoints for providers and natural language /ask."""
+
+import math
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
-from app.schemas.provider import AskRequest, AskResponse, ProviderResponse
-from app.services.openai_service import convert_question_to_sql
-from app.utils.geo import get_zip_coordinates
+from ..core.database import get_db
+from ..models.drg import DRG
+from ..models.drg_price import DRGPrice
+from ..models.provider import Provider
+from ..models.rating import Rating
+from ..schemas.provider import AskRequest, AskResponse, ProviderInfo
+from ..services.openai_service import generate_grounded_answer, nl_to_sql, run_sql
+from ..utils.geo import get_zip_coordinates
 
 router = APIRouter()
+
+
+def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate the great circle distance between two points on Earth.
+
+    Args:
+        lat1, lon1: Latitude and longitude of first point
+        lat2, lon2: Latitude and longitude of second point
+
+    Returns:
+        Distance in kilometers
+    """
+    # Convert latitude and longitude from degrees to radians
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+
+    # Haversine formula
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    c = 2 * math.asin(math.sqrt(a))
+
+    # Radius of earth in kilometers
+    r = 6371
+    return c * r
 
 
 @router.get("/health")
@@ -15,9 +48,9 @@ async def health_check():
     return {"status": "healthy", "service": "healthcare-cost-navigator"}
 
 
-@router.get("/providers", response_model=list[ProviderResponse])
+@router.get("/providers", response_model=list[ProviderInfo])
 async def get_providers(
-    drg: str | None = Query(None, description="DRG definition to search for"),
+    drg: str | None = Query(None, description="DRG ID (e.g., '470') or DRG definition to search for"),
     zip: str | None = Query(None, description="ZIP code to search from"),
     radius_km: float | None = Query(None, description="Radius in kilometers"),
     db: AsyncSession = Depends(get_db),
@@ -26,181 +59,144 @@ async def get_providers(
     Search for healthcare providers by DRG, ZIP code, and radius.
 
     Args:
-        drg: DRG definition to search for (fuzzy match)
+        drg: DRG ID (e.g., '470') for exact match or DRG definition text for fuzzy search
         zip: ZIP code to search from
         radius_km: Radius in kilometers from the ZIP code
         db: Database session
 
     Returns:
-        List of providers matching the criteria, sorted by cost
+        List of distinct providers matching the criteria
     """
-    # Build the base query with Haversine distance calculation
-    base_sql = """
-    SELECT
-        p.provider_id,
-        p.provider_name,
-        p.provider_city,
-        p.provider_state,
-        p.provider_zip_code,
-        d.ms_drg_definition,
-        d.total_discharges,
-        d.average_covered_charges,
-        d.average_total_payments,
-        d.average_medicare_payments,
-        r.rating,
-        NULL AS distance_km
-    FROM providers p
-    JOIN drg_prices d ON p.provider_id = d.provider_id
-    JOIN ratings r ON p.provider_id = r.provider_id
-    WHERE 1=1
-    """
+    # Build a single query that returns providers with aggregated rating
+    query = (
+        select(
+            Provider.provider_id,
+            Provider.provider_name,
+            Provider.provider_city,
+            Provider.provider_state,
+            Provider.provider_zip_code,
+            func.avg(Rating.rating).label("avg_rating"),
+        )
+        .select_from(Provider)
+        .outerjoin(Rating, Rating.provider_id == Provider.provider_id)
+    )
 
-    params = {}
-
-    # Apply DRG filter if provided
+    # Apply DRG filter if provided - join with DRGPrice and DRG tables
     if drg:
-        base_sql += " AND d.ms_drg_definition ILIKE :drg_pattern"
-        params["drg_pattern"] = f"%{drg}%"
+        # First check if drg is a number (DRG ID) or text (DRG definition search)
+        if drg.isdigit():
+            # Search by DRG ID
+            query = query.join(DRGPrice, DRGPrice.provider_id == Provider.provider_id).where(
+                DRGPrice.drg_id == int(drg)
+            )
+        else:
+            # Search by DRG definition - need to join through DRG table
+            query = (
+                query.join(DRGPrice, DRGPrice.provider_id == Provider.provider_id)
+                .join(DRG, DRG.drg_id == DRGPrice.drg_id)
+                .where(DRG.ms_drg_definition.ilike(f"%{drg}%"))
+            )
+
+    # Group by provider fields for aggregation
+    query = query.group_by(
+        Provider.provider_id,
+        Provider.provider_name,
+        Provider.provider_city,
+        Provider.provider_state,
+        Provider.provider_zip_code,
+    )
+
+    # Execute the query and build response models
+    rows = (await db.execute(query)).mappings().all()
+
+    providers: list[ProviderInfo] = []
+    for row in rows:
+        avg_rating = row["avg_rating"]
+        providers.append(
+            ProviderInfo(
+                provider_id=row["provider_id"],
+                provider_name=row["provider_name"],
+                provider_city=row["provider_city"],
+                provider_state=row["provider_state"],
+                provider_zip_code=row["provider_zip_code"],
+                rating=int(avg_rating) if avg_rating is not None else None,
+                distance_km=None,
+            )
+        )
 
     # Apply radius filter if ZIP and radius are provided
     if zip and radius_km:
         try:
-            # Get coordinates for the search ZIP from the database
-            zip_query = "SELECT latitude, longitude FROM zip_codes WHERE zip_code = :zip_code"
-            zip_result = await db.execute(text(zip_query), {"zip_code": zip})
-            zip_row = zip_result.fetchone()
-            
-            if not zip_row:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"ZIP code {zip} not found in our database"
-                )
-            
-            search_lat, search_lon = zip_row.latitude, zip_row.longitude
-            
-            # Update the query to include distance calculation and filtering
-            base_sql = """
-            SELECT
-                p.provider_id,
-                p.provider_name,
-                p.provider_city,
-                p.provider_state,
-                p.provider_zip_code,
-                d.ms_drg_definition,
-                d.total_discharges,
-                d.average_covered_charges,
-                d.average_total_payments,
-                d.average_medicare_payments,
-                r.rating,
-                (
-                    6371 * acos(
-                        cos(radians(:search_lat)) * cos(radians(z.latitude)) * 
-                        cos(radians(z.longitude) - radians(:search_lon)) + 
-                        sin(radians(:search_lat)) * sin(radians(z.latitude))
-                    )
-                ) AS distance_km
-            FROM providers p
-            JOIN drg_prices d ON p.provider_id = d.provider_id
-            JOIN ratings r ON p.provider_id = r.provider_id
-            JOIN zip_codes z ON p.provider_zip_code = z.zip_code
-            WHERE 1=1
-            """
-            
-            # Add DRG filter if provided
-            if drg:
-                base_sql += " AND d.ms_drg_definition ILIKE :drg_pattern"
-                params["drg_pattern"] = f"%{drg}%"
-            
-            # Add distance filter
-            base_sql += """
-            AND (
-                6371 * acos(
-                    cos(radians(:search_lat)) * cos(radians(z.latitude)) * 
-                    cos(radians(z.longitude) - radians(:search_lon)) + 
-                    sin(radians(:search_lat)) * sin(radians(z.latitude))
-                )
-            ) <= :radius_km
-            """
-            
-            params["search_lat"] = search_lat
-            params["search_lon"] = search_lon
-            params["radius_km"] = radius_km
+            # Get coordinates for the search ZIP using the geo utility
+            search_lat, search_lon = await get_zip_coordinates(zip)
 
-        except HTTPException:
-            raise
+            # Filter providers by distance
+            filtered_providers = []
+            for provider in providers:
+                try:
+                    # Get coordinates for provider ZIP code
+                    provider_lat, provider_lon = await get_zip_coordinates(provider.provider_zip_code)
+
+                    # Calculate distance
+                    distance = calculate_distance(search_lat, search_lon, provider_lat, provider_lon)
+
+                    # Check if within radius
+                    if distance <= radius_km:
+                        provider.distance_km = distance
+                        filtered_providers.append(provider)
+                except ValueError:
+                    # Skip providers with invalid ZIP codes
+                    continue
+
+            providers = filtered_providers
+
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid ZIP code: {str(e)}") from e
         except Exception as e:
-            raise HTTPException(
-                status_code=400, detail=f"Error processing ZIP code: {str(e)}"
-            ) from e
+            raise HTTPException(status_code=500, detail=f"Error processing geographic search: {str(e)}") from e
 
-    # Sort by distance first (if available), then by average covered charges
-    if zip and radius_km:
-        base_sql += " ORDER BY distance_km ASC, d.average_covered_charges ASC"
-    else:
-        base_sql += " ORDER BY d.average_covered_charges ASC"
-
-    # Execute query
-    result = await db.execute(text(base_sql), params)
-    rows = result.fetchall()
-
-    # Convert to response format
-    providers = []
-    for row in rows:
-        providers.append(
-            ProviderResponse(
-                provider_id=row.provider_id,
-                provider_name=row.provider_name,
-                provider_city=row.provider_city,
-                provider_state=row.provider_state,
-                provider_zip_code=row.provider_zip_code,
-                ms_drg_definition=row.ms_drg_definition,
-                total_discharges=row.total_discharges,
-                average_covered_charges=row.average_covered_charges,
-                average_total_payments=row.average_total_payments,
-                average_medicare_payments=row.average_medicare_payments,
-                rating=row.rating,
-                distance_km=row.distance_km,
-            )
-        )
+    # Sort by provider name for consistent ordering
+    providers.sort(key=lambda x: x.provider_name)
 
     return providers
 
 
 @router.post("/ask", response_model=AskResponse)
-async def ask_question(request: AskRequest, db: AsyncSession = Depends(get_db)):
+async def ask_question(payload: AskRequest, db: AsyncSession = Depends(get_db)):
     """
-    Answer natural language questions about healthcare providers.
-
-    Args:
-        request: Question request with natural language question
-        db: Database session
-
-    Returns:
-        Answer with grounded results from the database
+    Receive a natural language question, generate SQL with LLM,
+    execute it against Postgres, and return grounded answer + results.
     """
-    # Convert question to SQL using OpenAI
-    result = await convert_question_to_sql(request.question)
+    question = payload.question
 
-    if result["sql"] is None:
-        return AskResponse(answer=result["explanation"], results=None)
+    # Generate SQL query from natural language
+    sql_query = await nl_to_sql(question)
+    
+    # Execute the SQL query safely
+    results = await run_sql(db, sql_query)
 
-    try:
-        # Execute the SQL query
-        query_result = await db.execute(text(result["sql"]))
-        rows = query_result.fetchall()
+    # Handle error cases
+    if not results:
+        answer = await generate_grounded_answer(question, sql_query, [])
+        return {
+            "question": question,
+            "sql_query": sql_query,
+            "results": [],
+            "answer": answer,
+            "explanation": "No rows returned; generated grounded answer from empty result set.",
+        }
 
-        # Convert rows to dictionaries
-        results = []
-        for row in rows:
-            results.append(dict(row._mapping))
+    first = results[0] if isinstance(results, list) else {}
+    if isinstance(first, dict) and "error" in first:
+        raise HTTPException(status_code=400, detail=first)
 
-        # Format the answer
-        if results:
-            answer = f"Found {len(results)} results. {result['explanation']}"
-        else:
-            answer = f"No results found. {result['explanation']}"
+    # Generate grounded answer based on results
+    answer = await generate_grounded_answer(question, sql_query, results)
 
-        return AskResponse(answer=answer, results=results)
-
-    except Exception as e:
-        return AskResponse(answer=f"Error executing query: {str(e)}", results=None)
+    return {
+        "question": question,
+        "sql_query": sql_query,
+        "results": results,
+        "answer": answer,
+        "explanation": "SQL generated by LLM and executed; answer grounded in returned rows.",
+    }

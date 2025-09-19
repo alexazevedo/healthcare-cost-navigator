@@ -3,15 +3,28 @@
 from pydantic import BaseModel
 
 
-class ProviderResponse(BaseModel):
-    """Provider response schema."""
+class ProviderInfo(BaseModel):
+    """Provider information schema (without DRG pricing data)."""
 
     provider_id: str
     provider_name: str
     provider_city: str
     provider_state: str
     provider_zip_code: str
-    ms_drg_definition: str
+    rating: int | None = None
+    distance_km: float | None = None
+
+
+class ProviderResponse(BaseModel):
+    """Provider response schema with DRG pricing data."""
+
+    provider_id: str
+    provider_name: str
+    provider_city: str
+    provider_state: str
+    provider_zip_code: str
+    drg_id: int | None = None  # Now integer
+    ms_drg_definition: str | None = None  # From joined DRG table
     total_discharges: int
     average_covered_charges: float
     average_total_payments: float
@@ -29,5 +42,8 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     """Ask response schema."""
 
+    question: str
     answer: str
+    sql_query: str | None = None
+    explanation: str
     results: list[dict] | None = None

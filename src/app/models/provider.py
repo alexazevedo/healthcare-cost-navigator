@@ -4,7 +4,7 @@ from sqlalchemy import Index, String
 from sqlalchemy.dialects.postgresql import VARCHAR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base
+from ..core.database import Base
 
 
 class Provider(Base):
@@ -32,6 +32,4 @@ class Provider(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<Provider(provider_id='{self.provider_id}', name='{self.provider_name}')>"
-        )
+        return f"<Provider(provider_id='{self.provider_id}', name='{self.provider_name}')>"

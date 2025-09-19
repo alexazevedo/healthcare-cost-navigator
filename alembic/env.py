@@ -1,5 +1,6 @@
 import asyncio
 from logging.config import fileConfig
+
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -17,8 +18,8 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-from app.core.database import Base
-from app.core.config import settings
+from app.core.config import settings  # noqa: E402
+from app.core.database import Base  # noqa: E402
 
 target_metadata = Base.metadata
 
@@ -29,7 +30,10 @@ target_metadata = Base.metadata
 
 
 def get_url():
-    return settings.DATABASE_URL or f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@localhost:5432/{settings.POSTGRES_DB}"
+    return (
+        settings.DATABASE_URL
+        or f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@localhost:5432/{settings.POSTGRES_DB}"
+    )
 
 
 def run_migrations_offline() -> None:

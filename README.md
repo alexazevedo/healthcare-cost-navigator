@@ -59,7 +59,11 @@ The API will be available at `http://localhost:8000`
 
 2. **Set up environment variables**
    ```bash
-   cp .env.example .env
+   # Quick setup
+   ./setup_env.sh
+   
+   # Or manually
+   cp env.example .env
    # Edit .env with your configuration
    ```
 
@@ -195,38 +199,56 @@ healthcare-cost-navigator/
 
 ## Environment Variables
 
-Create a `.env` file with the following variables:
+The project includes an `env.example` file with all necessary environment variables. To set up your environment:
 
-```env
-# Database
-DATABASE_URL=postgresql://postgres:password@localhost:5432/healthcare_cost_navigator
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=password
-POSTGRES_DB=healthcare_cost_navigator
+```bash
+# Quick setup (recommended)
+./setup_env.sh
 
-# Application
-ENVIRONMENT=development
-DEBUG=true
-PROJECT_NAME=Healthcare Cost Navigator
-
-# OpenAI (for natural language queries)
-OPENAI_API_KEY=your_openai_api_key_here
+# Or manually
+cp env.example .env
+# Edit .env with your configuration
 ```
+
+**Required Variables:**
+- `DATABASE_URL`: PostgreSQL connection string
+- `POSTGRES_USER`: Database username (default: postgres)
+- `POSTGRES_PASSWORD`: Database password (default: password)
+- `POSTGRES_DB`: Database name (default: healthcare_cost_navigator)
+- `OPENAI_API_KEY`: Your OpenAI API key for natural language queries
+
+**Optional Variables:**
+- `PROJECT_NAME`: Application name (default: Healthcare Cost Navigator)
+- `ENVIRONMENT`: Environment mode (default: development)
+- `DEBUG`: Debug mode (default: true)
 
 ## Testing
 
-Run the test suite:
+The project uses a volatile test database approach for reliable, clean test runs:
 
 ```bash
-# Run all tests
-make test
+# Run all tests with volatile database (recommended)
+make test-volatile
+
+# Run tests with full data setup
+make test-setup
+
+# Run only unit tests (no database required)
+make test-unit
 
 # Run with coverage
 make test-cov
 
-# Run specific test file
-pipenv run pytest tests/test_main.py -v
+# Run specific test categories
+make test-integration
 ```
+
+### Test Database Strategy
+
+- **Volatile Database**: Each test run creates a fresh database, runs migrations, loads minimal test data, runs tests, then cleans up
+- **Clean State**: No test pollution between runs
+- **Reliable**: Consistent test results every time
+- **Fast**: Minimal test data for quick execution
 
 ## API Documentation
 

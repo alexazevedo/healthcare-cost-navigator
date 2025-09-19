@@ -7,9 +7,7 @@ columns (zip, latitude, longitude) for use in the healthcare cost navigator.
 """
 
 import csv
-import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import pandas as pd
 import requests
@@ -18,28 +16,28 @@ import requests
 def download_zip_data() -> str:
     """
     Download ZIP code data from a free source.
-    
+
     Returns:
         str: Path to the downloaded CSV file
     """
     # Using a free ZIP code dataset from GitHub
     url = "https://raw.githubusercontent.com/OpenDataDE/State-zip-code-GeoJSON/master/zip_codes.csv"
-    
+
     print(f"Downloading ZIP code data from: {url}")
-    
+
     try:
         response = requests.get(url, stream=True)
         response.raise_for_status()
-        
+
         # Save to temporary file
         temp_file = "temp_zip_data.csv"
-        with open(temp_file, 'wb') as f:
+        with open(temp_file, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
-        
+
         print(f"Downloaded ZIP data to: {temp_file}")
         return temp_file
-        
+
     except requests.RequestException as e:
         print(f"Error downloading ZIP data: {e}")
         # Fallback to a different source
@@ -49,27 +47,27 @@ def download_zip_data() -> str:
 def download_zip_data_fallback() -> str:
     """
     Fallback method to download ZIP code data from an alternative source.
-    
+
     Returns:
         str: Path to the downloaded CSV file
     """
     # Alternative source: Simple ZIP code data
     url = "https://gist.githubusercontent.com/erichurst/7882666/raw/5bdc46db47d6515267a60de6257b96d895057b52/usa_zip_codes.csv"
-    
+
     print(f"Trying fallback source: {url}")
-    
+
     try:
         response = requests.get(url, stream=True)
         response.raise_for_status()
-        
+
         temp_file = "temp_zip_data_fallback.csv"
-        with open(temp_file, 'wb') as f:
+        with open(temp_file, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
-        
+
         print(f"Downloaded ZIP data from fallback to: {temp_file}")
         return temp_file
-        
+
     except requests.RequestException as e:
         print(f"Error downloading from fallback source: {e}")
         return create_sample_zip_data()
@@ -78,12 +76,12 @@ def download_zip_data_fallback() -> str:
 def create_sample_zip_data() -> str:
     """
     Create sample ZIP code data for demonstration purposes.
-    
+
     Returns:
         str: Path to the created CSV file
     """
     print("Creating sample ZIP code data for demonstration...")
-    
+
     # Sample ZIP codes with coordinates (focusing on NY area since our data is NY-based)
     sample_data = [
         {"zip": "10001", "lat": 40.7505, "lon": -73.9934},  # Manhattan
@@ -338,13 +336,13 @@ def create_sample_zip_data() -> str:
         {"zip": "10298", "lat": 40.7505, "lon": -73.9934},  # Midtown
         {"zip": "10299", "lat": 40.7505, "lon": -73.9934},  # Midtown
     ]
-    
+
     temp_file = "temp_sample_zip_data.csv"
-    with open(temp_file, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['zip', 'lat', 'lon'])
+    with open(temp_file, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["zip", "lat", "lon"])
         writer.writeheader()
         writer.writerows(sample_data)
-    
+
     print(f"Created sample ZIP data: {temp_file}")
     return temp_file
 
@@ -352,74 +350,82 @@ def create_sample_zip_data() -> str:
 def process_zip_data(input_file: str, output_file: str) -> None:
     """
     Process the downloaded ZIP data and extract only relevant columns.
-    
+
     Args:
         input_file: Path to the downloaded CSV file
         output_file: Path to save the processed CSV file
     """
     print(f"Processing ZIP data from: {input_file}")
-    
+
     try:
         # Try to read the CSV with different encodings
         try:
-            df = pd.read_csv(input_file, encoding='utf-8')
+            df = pd.read_csv(input_file, encoding="utf-8")
         except UnicodeDecodeError:
             try:
-                df = pd.read_csv(input_file, encoding='latin-1')
+                df = pd.read_csv(input_file, encoding="latin-1")
             except UnicodeDecodeError:
-                df = pd.read_csv(input_file, encoding='cp1252')
-        
+                df = pd.read_csv(input_file, encoding="cp1252")
+
         print(f"Original data shape: {df.shape}")
         print(f"Columns: {list(df.columns)}")
-        
+
         # Try to identify the correct columns
         zip_col = None
         lat_col = None
         lon_col = None
-        
+
         # Look for common column names
         for col in df.columns:
             col_lower = col.lower()
-            if 'zip' in col_lower and zip_col is None:
+            if "zip" in col_lower and zip_col is None:
                 zip_col = col
-            elif ('lat' in col_lower or 'latitude' in col_lower) and lat_col is None:
+            elif ("lat" in col_lower or "latitude" in col_lower) and lat_col is None:
                 lat_col = col
-            elif ('lon' in col_lower or 'lng' in col_lower or 'longitude' in col_lower) and lon_col is None:
+            elif (
+                "lon" in col_lower or "lng" in col_lower or "longitude" in col_lower
+            ) and lon_col is None:
                 lon_col = col
-        
+
         if zip_col and lat_col and lon_col:
             print(f"Found columns: ZIP={zip_col}, LAT={lat_col}, LON={lon_col}")
-            
+
             # Extract and clean the data
             processed_df = df[[zip_col, lat_col, lon_col]].copy()
-            processed_df.columns = ['zip_code', 'latitude', 'longitude']
-            
+            processed_df.columns = ["zip_code", "latitude", "longitude"]
+
             # Clean the data
             processed_df = processed_df.dropna()
-            processed_df['zip_code'] = processed_df['zip_code'].astype(str).str.strip()
-            processed_df['latitude'] = pd.to_numeric(processed_df['latitude'], errors='coerce')
-            processed_df['longitude'] = pd.to_numeric(processed_df['longitude'], errors='coerce')
-            
+            processed_df["zip_code"] = processed_df["zip_code"].astype(str).str.strip()
+            processed_df["latitude"] = pd.to_numeric(
+                processed_df["latitude"], errors="coerce"
+            )
+            processed_df["longitude"] = pd.to_numeric(
+                processed_df["longitude"], errors="coerce"
+            )
+
             # Remove rows with invalid coordinates
             processed_df = processed_df.dropna()
             processed_df = processed_df[
-                (processed_df['latitude'] >= -90) & (processed_df['latitude'] <= 90) &
-                (processed_df['longitude'] >= -180) & (processed_df['longitude'] <= 180)
+                (processed_df["latitude"] >= -90)
+                & (processed_df["latitude"] <= 90)
+                & (processed_df["longitude"] >= -180)
+                & (processed_df["longitude"] <= 180)
             ]
-            
+
             print(f"Processed data shape: {processed_df.shape}")
-            
+
             # Save the processed data
             processed_df.to_csv(output_file, index=False)
             print(f"Saved processed ZIP data to: {output_file}")
-            
+
         else:
             print("Could not identify ZIP, latitude, and longitude columns")
             print("Available columns:", list(df.columns))
             # Use sample data as fallback
             create_sample_zip_data()
             return
-            
+
     except Exception as e:
         print(f"Error processing ZIP data: {e}")
         # Use sample data as fallback
@@ -432,30 +438,30 @@ def main():
     print("=" * 60)
     print("ZIP Code Data Download and Processing".center(60))
     print("=" * 60)
-    
+
     output_file = "zip_lat_lon.csv"
-    
+
     # Try to download real data
     try:
         temp_file = download_zip_data()
         process_zip_data(temp_file, output_file)
-        
+
         # Clean up temporary file
         Path(temp_file).unlink(missing_ok=True)
         print(f"Cleaned up temporary file: {temp_file}")
-        
+
     except Exception as e:
         print(f"Error with real data download: {e}")
         print("Falling back to sample data...")
-        
+
         # Use sample data as fallback
         temp_file = create_sample_zip_data()
         process_zip_data(temp_file, output_file)
-        
+
         # Clean up temporary file
         Path(temp_file).unlink(missing_ok=True)
         print(f"Cleaned up temporary file: {temp_file}")
-    
+
     print("\n" + "=" * 60)
     print("ZIP code data processing completed!".center(60))
     print(f"Output file: {output_file}".center(60))

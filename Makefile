@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-verbose test-cov lint lint-fix format format-check check-all clean start stop restart logs db-migrate db-revision db-history db-current shell dev-server python-shell check-deps security-check update-deps lock-deps sync-deps
+.PHONY: help install install-dev test test-unit test-integration test-cov test-watch lint lint-fix format format-check check-all clean run-db stop restart logs db-migrate db-revision db-history db-current db-reset shell run-dev python-shell check-deps security-check update-deps lock-deps sync-deps
 
 # Default target
 help: ## Show this help message
@@ -25,14 +25,64 @@ check-deps: ## Check for outdated dependencies and security issues
 	pipenv check
 
 # Testing
-test: ## Run tests
-	pipenv run pytest
+test: ## Run all tests (unit + integration) with volatile database
+	@echo "Setting up volatile test database..."
+	@docker compose up -d db
+	@sleep 5
+	@echo "Creating test database..."
+	@docker compose exec -T db psql -U postgres -c "DROP DATABASE IF EXISTS healthcare_cost_navigator_test;"
+	@docker compose exec -T db psql -U postgres -c "CREATE DATABASE healthcare_cost_navigator_test;"
+	@echo "Running migrations on test database..."
+	@DATABASE_URL="postgresql://postgres:password@localhost:5432/healthcare_cost_navigator_test" pipenv run alembic upgrade head
+	@echo "Running all tests (tests will load their own data as needed)..."
+	@pipenv run pytest tests/unit/ tests/integration/ -v
+	@echo "Cleaning up test database..."
+	@docker compose exec -T db psql -U postgres -c "DROP DATABASE IF EXISTS healthcare_cost_navigator_test;"
 
-test-verbose: ## Run tests with verbose output
-	pipenv run pytest -v
+test-unit: ## Run only unit tests with volatile database
+	@echo "Setting up volatile test database..."
+	@docker compose up -d db
+	@sleep 5
+	@echo "Creating test database..."
+	@docker compose exec -T db psql -U postgres -c "DROP DATABASE IF EXISTS healthcare_cost_navigator_test;"
+	@docker compose exec -T db psql -U postgres -c "CREATE DATABASE healthcare_cost_navigator_test;"
+	@echo "Running migrations on test database..."
+	@DATABASE_URL="postgresql://postgres:password@localhost:5432/healthcare_cost_navigator_test" pipenv run alembic upgrade head
+	@echo "Running unit tests (no test data needed)..."
+	@pipenv run pytest tests/unit/ -v
+	@echo "Cleaning up test database..."
+	@docker compose exec -T db psql -U postgres -c "DROP DATABASE IF EXISTS healthcare_cost_navigator_test;"
+
+test-integration: ## Run only integration tests with volatile database
+	@echo "Setting up volatile test database..."
+	@docker compose up -d db
+	@sleep 5
+	@echo "Creating test database..."
+	@docker compose exec -T db psql -U postgres -c "DROP DATABASE IF EXISTS healthcare_cost_navigator_test;"
+	@docker compose exec -T db psql -U postgres -c "CREATE DATABASE healthcare_cost_navigator_test;"
+	@echo "Running migrations on test database..."
+	@DATABASE_URL="postgresql://postgres:password@localhost:5432/healthcare_cost_navigator_test" pipenv run alembic upgrade head
+	@echo "Running integration tests (tests will load their own data)..."
+	@pipenv run pytest tests/integration/ -v
+	@echo "Cleaning up test database..."
+	@docker compose exec -T db psql -U postgres -c "DROP DATABASE IF EXISTS healthcare_cost_navigator_test;"
 
 test-cov: ## Run tests with coverage report
-	pipenv run pytest --cov=src --cov-report=html --cov-report=term
+	@echo "Setting up volatile test database..."
+	@docker compose up -d db
+	@sleep 5
+	@echo "Creating test database..."
+	@docker compose exec -T db psql -U postgres -c "DROP DATABASE IF EXISTS healthcare_cost_navigator_test;"
+	@docker compose exec -T db psql -U postgres -c "CREATE DATABASE healthcare_cost_navigator_test;"
+	@echo "Running migrations on test database..."
+	@DATABASE_URL="postgresql://postgres:password@localhost:5432/healthcare_cost_navigator_test" pipenv run alembic upgrade head
+	@echo "Running tests with coverage (tests will load their own data as needed)..."
+	@pipenv run pytest tests/unit/ tests/integration/ --cov=src --cov-report=html --cov-report=term
+	@echo "Cleaning up test database..."
+	@docker compose exec -T db psql -U postgres -c "DROP DATABASE IF EXISTS healthcare_cost_navigator_test;"
+
+test-watch: ## Run tests in watch mode
+	pipenv run pytest-watch
 
 # Code Quality
 lint: ## Run linting with ruff
@@ -74,12 +124,31 @@ db-current: ## Show current migration
 db-downgrade: ## Downgrade database by one migration
 	pipenv run alembic downgrade -1
 
+db-reset: ## Reset database completely (WARNING: This will delete all data!)
+	@echo "WARNING: This will completely reset the database and delete ALL data!"
+	@echo "This includes:"
+	@echo "  - All tables and data"
+	@echo "  - All migrations history"
+	@echo "  - ZIP code data"
+	@echo "  - Healthcare provider data"
+	@echo ""
+	@read -p "Are you sure you want to continue? (yes/no): " confirm && [ "$$confirm" = "yes" ] || exit 1
+	@echo "Resetting database..."
+	@docker compose exec -T db psql -U postgres -d healthcare_cost_navigator -c "DROP SCHEMA IF EXISTS public CASCADE;"
+	@docker compose exec -T db psql -U postgres -d healthcare_cost_navigator -c "DROP TABLE IF EXISTS alembic_version CASCADE;"
+	@docker compose exec -T db psql -U postgres -d healthcare_cost_navigator -c "CREATE SCHEMA public;"
+	@docker compose exec -T db psql -U postgres -d healthcare_cost_navigator -c "GRANT ALL ON SCHEMA public TO postgres;"
+	@docker compose exec -T db psql -U postgres -d healthcare_cost_navigator -c "GRANT ALL ON SCHEMA public TO public;"
+	@echo "Database reset successfully!"
+	@echo "Run 'make db-migrate' to recreate the schema and load ZIP code data."
+	@echo "Run 'make run-etl' to load healthcare data (ETL will automatically clear data before loading)."
+
 # Development Server
-dev-server: ## Start development server locally
-	pipenv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+run-dev: ## Start development server locally
+	pipenv run uvicorn app.main:app --app-dir src --reload --host 0.0.0.0 --port 8000
 
 python-shell: ## Open Python shell with app context
-	pipenv run python -c "from app.main import app; print('App loaded successfully')"
+	PYTHONPATH=src pipenv run python -c "from app.main import app; print('App loaded successfully')"
 
 # Scripts
 download-sample-ny-data: ## Download and extract NY healthcare data from CMS
@@ -92,8 +161,8 @@ run-script: ## Run a script from the scripts/ directory (usage: make run-script 
 	pipenv run python scripts/$(SCRIPT)
 
 # Docker Operations
-start: ## Start the application with Docker Compose
-	docker compose up -d
+run-db: ## Start only the database container
+	docker compose up -d db
 
 stop: ## Stop the application
 	docker compose down

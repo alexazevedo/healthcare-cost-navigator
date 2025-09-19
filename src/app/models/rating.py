@@ -4,22 +4,18 @@ from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer
 from sqlalchemy.dialects.postgresql import VARCHAR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base
+from ..core.database import Base
 
 
 class Rating(Base):
     __tablename__ = "ratings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    provider_id: Mapped[str] = mapped_column(
-        VARCHAR(6), ForeignKey("providers.provider_id"), nullable=False
-    )
+    provider_id: Mapped[str] = mapped_column(VARCHAR(6), ForeignKey("providers.provider_id"), nullable=False)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Relationships
-    provider: Mapped[Provider] = relationship(  # noqa: F821
-        "Provider", back_populates="ratings"
-    )
+    provider: Mapped[Provider] = relationship("Provider", back_populates="ratings")  # noqa: F821
 
     # Constraints and indexes
     __table_args__ = (
